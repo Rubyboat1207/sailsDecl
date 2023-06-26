@@ -2,6 +2,8 @@
 var utils = require('./index')
 var fs = require('fs')
 
+const typingsDir = process.argv[2] || '';
+
 if(!utils.isASailsProject()) {
     console.log("This is not a sails.js project")
     return;
@@ -10,16 +12,17 @@ if(!utils.isASailsProject()) {
 console.log("Creating Model Declarations")
 
 const attrs = utils.getAllModels();
-let globalAdditions = '';
-let imports = '';
-let vars = '';
+// let globalAdditions = '';
+// let imports = [];
+// let vars = '';
 
+fs.mkdirSync(`${typingsDir}models`);
 
 for(const model of attrs) {
     const objName = `${model.name}Object`;
-    globalAdditions += `        ${model.name}: ${objName}\n`;
-    imports += `import { ${model.name}Model } from "./${model.name}.d.ts"\n`
-    vars += `declare var ${model.name}: ${model.name}Model;\n`
+    // globalAdditions += `        ${model.name}: ${model.name}Model\n`;
+    // imports += `import type { ${model.name}Model } from "./${model.name}.d.ts"\n`
+    // vars += `export var ${model.name}: ${model.name}Model;\n`
 
 
     let baseFile = `
@@ -59,35 +62,35 @@ export declare interface ${model.name}Model {
     find(selector: ${objName}): Promise< ${objName}[] >
 }`
 
-    fs.writeFileSync(`./${model.name}.d.ts`, baseFile)
+    fs.writeFileSync(`./${typingsDir}models/${model.name}.d.ts`, baseFile)
     console.log(`Generated ${model.name} declaration`)
 }
 
 let globalDecl = `
-import { ActivityHelpers } from "./activity";
-import { AuthHelpers } from "./auth";
-${imports}
+${attrs.map((m) => `import type { ${m.name}Model } from "./models/${m.name}.d.ts"`).join('\n')}
 
 declare interface SailsObject {
     helpers: HelpersObject;
 }
 
 declare interface HelpersObject {
-    activity: ActivityHelpers
-    auth: AuthHelpers
 }
 
 export declare interface HelperObject<T, R> {
     with(input: T): Promise<R>;
 }
 
-declare var sails: SailsObject;
-${vars}
+declare global {
+    export var sails: SailsObject;
+    ${attrs.map((m) => `export var ${m.name}: ${m.name}Model;`).join('\n    ')}
+}
+
+
 
 declare namespace NodeJS {
     interface Global {
         sails: SailsObject;
-${globalAdditions}
+        ${attrs.map((m) => `${m.name}: ${m.name}Model`).join('\n        ')}
     }
 }`
-    fs.writeFileSync('global.d.ts', globalDecl);
+    fs.writeFileSync(`${typingsDir}global.d.ts`, globalDecl);
