@@ -19,13 +19,15 @@ export declare interface Exposed${objName} extends ExposedModel< ${objName} > {}
  * @param {{name: string, helperType: "direct" | "category", inputType: string | undefined, outputType: string | undefined}[]} helpers 
  * @returns string of helper category to be written to file.
  */
-const createHelperCategory = (name, helpers) => {
+const createHelperCategory = (name, helpers, imports) => {
     const subHelpers = helpers.filter(h => h.helperType === 'direct').map(h => createIndividualHelper(h.name, h.inputType, h.outputType))
     const subCategories = helpers.filter(h => h.helperType === 'category').map(h => 
         `import { ${utils.uppercaseFirstLetter(h.name)} } from "./${h.name}"`
     )
 
     return `import { HelperObject } from "../global";
+${imports.join("\n")}
+
 export declare interface ${utils.uppercaseFirstLetter(name)} {
     ${subHelpers.join('\n    ')}
     ${subCategories.map(h => `${h.name}: ${utils.uppercaseFirstLetter(h.name)}`).join('\n    ')}

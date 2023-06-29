@@ -11,7 +11,6 @@ if (!utils.isASailsProject()) {
     return;
 }
 
-console.log("Creating Model Declarations");
 
 if(typingsDir !== '' && !fs.existsSync(`${typingsDir}`))
     fs.mkdirSync(`${typingsDir}`);
@@ -22,35 +21,40 @@ if(!fs.existsSync(`${typingsDir}models/`))
 if(!fs.existsSync(`${typingsDir}helpers/`))
     fs.mkdirSync(`${typingsDir}helpers`);
 
-
+console.log("Finding Models");
 const modelReferences = utils.getAllModels();
+console.log("Finding Helpers");
 const helperReferences = utils.getAllHelpers();
 
-// console.log(helperReferences)
+const allKnownReferenceableObjects = []
+const addImportCallbacks = {}
+const writeCallbacks = []
 
+// console.log(helperReferences)
+console.log("Writing Model Declarations")
 for (const model of modelReferences) {
     const objName = `${model.name}Object`;
     const variables = []
 
-    
-
     for (const key in model.attr) {
-        const type = model.attr[key].type;
-        const allowNull = model.attr[key].allowNull;
-        const coltype = model.attr[key].columnType;
-        let tsType = utils.getTSTypeFromSailsType(type, coltype);
-
-        if (allowNull === true || allowNull === undefined) {
-            tsType += ' | null';
-        }
-        variables.push({name: key, type: tsType})
+        variables.push({name: key, type: utils.getFullTsTypeDeclFromSailsObject(model.attr[key], addImportCallbacks)})
     }
-    
-
-    fs.writeFileSync(`./${typingsDir}models/${model.name}.d.ts`, mt.createModel(objName, variables));
+    allKnownReferenceableObjects.push({
+        obj: `Exposed${model.name}Object`,
+        ref: `import type { Exposed${model.name}Object } from "./models/${model.name}.d.ts";`,
+        type: 'exposedModel'
+    })
+    allKnownReferenceableObjects.push({
+        obj: objName,
+        ref: `import type { ${objName} } from "./models/${model.name}.d.ts";`,
+        type: 'model'
+    })
+    writeCallbacks.push(() => {
+        fs.writeFileSync(`./${typingsDir}models/${model.name}.d.ts`, mt.createModel(objName, variables));
+    })
     // console.log(`Generated ${model.name} declaration`);
 }
-
+console.log("Writing Helper Declarations")
 const rootCategory = {}
 
 for (const helper of helperReferences) {
@@ -80,6 +84,7 @@ for(const key in rootCategory) {
 
     const formattedHelpers = [];
     const realname = key.replace('/', '') + "Helper";
+    let uuid = new Date().valueOf();
 
     for(const helper of helpers) {
         const ref = helper.helper;
@@ -89,8 +94,8 @@ for(const key in rootCategory) {
         // console.log(paths);
 
         for(const input in ref.inputs) {
-            const sailsType = ref.inputs[input].type;
-            inputs.push(`${input}: ${utils.getTSTypeFromSailsType(sailsType)}`)
+            const sailsTypeObject = ref.inputs[input];
+            inputs.push(`${input}: ${utils.getFullTsTypeDeclFromSailsObject(sailsTypeObject, addImportCallbacks, uuid)}`)
         }
 
         // console.log(inputs)
@@ -102,17 +107,39 @@ for(const key in rootCategory) {
             outputType: 'Promise<any>'
         })
     }
-    topLevelCategories.push(realname.replace(/-./g, x=>x[1].toUpperCase()));
-    fs.writeFileSync(`${typingsDir}/helpers/${utils.uppercaseFirstLetter(realname.replace(/-./g, x=>x[1].toUpperCase()))}.d.ts`, mt.createHelperCategory(realname.replace(/-./g, x=>x[1].toUpperCase()), formattedHelpers))
+    
+    const camelCase = realname.replace(/-./g, x=>x[1].toUpperCase());
+    const pascalCase = utils.uppercaseFirstLetter(camelCase);
+
+    allKnownReferenceableObjects.push({
+        obj: pascalCase,
+        ref: `import type { ${pascalCase} } from "./helpers/${pascalCase}.d.ts";`,
+        type: 'helper'
+    })
+
+    topLevelCategories.push(pascalCase);
+    writeCallbacks.push(() => {
+        const imports = [];
+        if(addImportCallbacks.hasOwnProperty(uuid)) {
+            const referencedObjects = allKnownReferenceableObjects.filter(p => addImportCallbacks[uuid].includes(p.obj));
+            console.log()
+            for(const refObj of referencedObjects) {
+                if(refObj.type == 'model') {
+                    imports.push(refObj.ref.replace('./models', '../models'));
+                }
+            }
+        }
+        fs.writeFileSync(`${typingsDir}/helpers/${pascalCase}.d.ts`, mt.createHelperCategory(camelCase, formattedHelpers, imports))
+    })
 }
+writeCallbacks.forEach(c => c());
 
-
-const modelImportStatements = modelReferences.map((m) => `import type { Exposed${m.name}Object } from "./models/${m.name}.d.ts";`).join('\n');
-const helperImportStatements = topLevelCategories.map((m) => `import type { ${utils.uppercaseFirstLetter(m)} } from "./helpers/${utils.uppercaseFirstLetter(m)}.d.ts";`).join('\n');
+console.log("Writing Global.d.ts file")
+// const modelImportStatements = modelReferences.map((m) => `import type { Exposed${m.name}Object } from "./models/${m.name}.d.ts";`).join('\n');
+// const helperImportStatements = topLevelCategories.map((m) => `import type { ${utils.uppercaseFirstLetter(m)} } from "./helpers/${utils.uppercaseFirstLetter(m)}.d.ts";`).join('\n');
 
 let globalDecl = `
-${modelImportStatements}
-${helperImportStatements}
+${allKnownReferenceableObjects.map(o => o.ref).join('\n')}
 
 declare interface SailsObject {
     helpers: HelpersObject;
