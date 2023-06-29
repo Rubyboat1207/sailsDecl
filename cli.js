@@ -2,6 +2,7 @@
 
 const utils = require('./index');
 const fs = require('fs');
+const mt = require('./templates')
 
 const typingsDir = process.argv[2] || '';
 
@@ -12,67 +13,120 @@ if (!utils.isASailsProject()) {
 
 console.log("Creating Model Declarations");
 
-const attrs = utils.getAllModels();
-if(!fs.existsSync(`${typingsDir}`))
+if(typingsDir !== '' && !fs.existsSync(`${typingsDir}`))
     fs.mkdirSync(`${typingsDir}`);
 
 if(!fs.existsSync(`${typingsDir}models/`))
     fs.mkdirSync(`${typingsDir}models`);
 
-for (const model of attrs) {
-    const objName = `${model.name}Object`;
+if(!fs.existsSync(`${typingsDir}helpers/`))
+    fs.mkdirSync(`${typingsDir}helpers`);
 
-    let baseFile = `
-declare interface ${objName} {
-`;
+
+const modelReferences = utils.getAllModels();
+const helperReferences = utils.getAllHelpers();
+
+// console.log(helperReferences)
+
+for (const model of modelReferences) {
+    const objName = `${model.name}Object`;
+    const variables = []
+
+    
 
     for (const key in model.attr) {
-        baseFile += `    ${key}: `;
-
         const type = model.attr[key].type;
         const allowNull = model.attr[key].allowNull;
         const coltype = model.attr[key].columnType;
-
-        if (['string', 'number', 'boolean'].includes(type)) {
-            if (coltype === 'datetime') {
-                baseFile += 'Date';
-            } else {
-                baseFile += type;
-            }
-        } else {
-            baseFile += 'any';
-        }
+        let tsType = utils.getTSTypeFromSailsType(type, coltype);
 
         if (allowNull === true || allowNull === undefined) {
-            baseFile += ' | null';
+            tsType += ' | null';
         }
+        variables.push({name: key, type: tsType})
+    }
+    
 
-        baseFile += ';\n';
+    fs.writeFileSync(`./${typingsDir}models/${model.name}.d.ts`, mt.createModel(objName, variables));
+    // console.log(`Generated ${model.name} declaration`);
+}
+
+const rootCategory = {}
+
+for (const helper of helperReferences) {
+    const path = helper.path.split('/').filter(p => p !== '');
+
+
+    let category = rootCategory;
+
+    for(let i = 0; i < path.length; i++) {
+        if(category[path[i]] === undefined) {
+            category[path[i]] = {};
+        }
+        category = category[path[i]];
     }
 
-    baseFile += `
+    if(category.helpers === undefined) {
+        category.helpers = [];
+    }
+
+    category.helpers.push(helper);
 }
 
-export declare interface ${model.name}Model {
-    update(selector: ${objName}): { set: (values: ${objName}) => Promise<void> };
-    findOne(selector: ${objName}): Promise<${objName}>;
-    find(selector: ${objName}): Promise<${objName}[]>;
-}`;
+const topLevelCategories = []
 
-    fs.writeFileSync(`./${typingsDir}models/${model.name}.d.ts`, baseFile);
-    console.log(`Generated ${model.name} declaration`);
+for(const key in rootCategory) {
+    const helpers = rootCategory[key].helpers;
+
+    const formattedHelpers = [];
+    const realname = key.replace('/', '') + "Helper";
+
+    for(const helper of helpers) {
+        const ref = helper.helper;
+        const inputs = [];
+        const paths = helper.path.split('/');
+
+        // console.log(paths);
+
+        for(const input in ref.inputs) {
+            const sailsType = ref.inputs[input].type;
+            inputs.push(`${input}: ${utils.getTSTypeFromSailsType(sailsType)}`)
+        }
+
+        // console.log(inputs)
+
+        formattedHelpers.push({
+            name: helper.name.substring(0, helper.name.length - 3).replace(/-./g, x=>x[1].toUpperCase()),
+            helperType: 'direct',
+            inputType: `{${inputs.join(', ')}}`,
+            outputType: 'Promise<any>'
+        })
+    }
+    topLevelCategories.push(realname.replace(/-./g, x=>x[1].toUpperCase()));
+    fs.writeFileSync(`${typingsDir}/helpers/${utils.uppercaseFirstLetter(realname.replace(/-./g, x=>x[1].toUpperCase()))}.d.ts`, mt.createHelperCategory(realname.replace(/-./g, x=>x[1].toUpperCase()), formattedHelpers))
 }
 
-const importStatements = attrs.map((m) => `import type { ${m.name}Model } from "./models/${m.name}.d.ts";`).join('\n');
+
+const modelImportStatements = modelReferences.map((m) => `import type { Exposed${m.name}Object } from "./models/${m.name}.d.ts";`).join('\n');
+const helperImportStatements = topLevelCategories.map((m) => `import type { ${utils.uppercaseFirstLetter(m)} } from "./helpers/${utils.uppercaseFirstLetter(m)}.d.ts";`).join('\n');
 
 let globalDecl = `
-${importStatements}
+${modelImportStatements}
+${helperImportStatements}
 
 declare interface SailsObject {
     helpers: HelpersObject;
+    log(...params: any);
+}
+
+export declare interface ExposedModel<T> {
+    update(selector: T): { set: (values: T) => Promise<void> };
+    findOne(selector: T): Promise<T>;
+    find(selector: T): Promise<T[]>;
 }
 
 declare interface HelpersObject {
+    ${mt.createHelpersObject(topLevelCategories)}
 }
 
 export declare interface HelperObject<T, R> {
@@ -81,13 +135,13 @@ export declare interface HelperObject<T, R> {
 
 declare global {
     export var sails: SailsObject;
-    ${attrs.map((m) => `export var ${m.name}: ${m.name}Model;`).join('\n    ')}
+    ${modelReferences.map((m) => `export var ${m.name}: Exposed${m.name}Object;`).join('\n    ')}
 }
 
 declare namespace NodeJS {
     interface Global {
         sails: SailsObject;
-        ${attrs.map((m) => `${m.name}: ${m.name}Model;`).join('\n        ')}
+        ${modelReferences.map((m) => `${m.name}: Exposed${m.name}Object;`).join('\n        ')}
     }
 }`;
 
