@@ -88,7 +88,7 @@ const getFullTsTypeDeclFromSailsObject = (sailsAttributeObject, callbackList, uu
     if(!callbackList.hasOwnProperty(uuid)) {
         callbackList[uuid] = []
     }
-    callbackList[uuid].push(sailsAttributeObject["$SD"])
+    callbackList[uuid].push(sailsAttributeObject["$SD"].replace('[', '').replace(']', ''))
     return sailsAttributeObject["$SD"];
   }
   return appendNullableIfApplicable(

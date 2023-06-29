@@ -84,7 +84,7 @@ for(const key in rootCategory) {
 
     const formattedHelpers = [];
     const realname = key.replace('/', '') + "Helper";
-    let uuid = new Date().valueOf();
+    let uuid = Math.random();
 
     for(const helper of helpers) {
         const ref = helper.helper;
