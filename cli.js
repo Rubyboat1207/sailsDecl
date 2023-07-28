@@ -123,7 +123,7 @@ for(const key in rootCategory) {
             name: helper.name.substring(0, helper.name.length - 3).replace(/-./g, x=>x[1].toUpperCase()),
             helperType: 'direct',
             inputType: `{${inputs.join(', ')}}`,
-            outputType: `Promise< ${returnType} >`
+            outputType: returnType
         })
     }
     
