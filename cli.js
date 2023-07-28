@@ -4,7 +4,7 @@ const utils = require('./index');
 const fs = require('fs');
 const mt = require('./templates')
 
-const typingsDir = process.argv[2] || '';
+const typingsDir = process.argv[2] || 'typings/';
 
 if (!utils.isASailsProject()) {
     console.log("This is not a sails.js project");
@@ -85,6 +85,7 @@ for(const key in rootCategory) {
     const formattedHelpers = [];
     const realname = key.replace('/', '') + "Helper";
     let uuid = Math.random();
+    const customImports = []; 
 
     for(const helper of helpers) {
         const ref = helper.helper;
@@ -98,13 +99,31 @@ for(const key in rootCategory) {
             inputs.push(`${input}: ${utils.getFullTsTypeDeclFromSailsObject(sailsTypeObject, addImportCallbacks, uuid)}`)
         }
 
+        let returnType = 'any';
+        if(ref.hasOwnProperty('$SD-ReturnType')) {
+            returnType = ref['$SD-ReturnType']
+            if(!addImportCallbacks.hasOwnProperty(uuid)) {
+                addImportCallbacks[uuid] = []
+            }
+            addImportCallbacks[uuid].push(returnType)
+        }
+
+        if(ref.hasOwnProperty('$SD-ExternalImports')) {
+            const extern = ref['$SD-ExternalImports'];
+            extern.forEach(imp => {
+                if(customImports.includes(imp))
+                    return;
+                customImports.push(imp)
+            })
+        }
+
         // console.log(inputs)
 
         formattedHelpers.push({
             name: helper.name.substring(0, helper.name.length - 3).replace(/-./g, x=>x[1].toUpperCase()),
             helperType: 'direct',
             inputType: `{${inputs.join(', ')}}`,
-            outputType: 'Promise<any>'
+            outputType: `Promise< ${returnType} >`
         })
     }
     
@@ -119,7 +138,7 @@ for(const key in rootCategory) {
 
     topLevelCategories.push(pascalCase);
     writeCallbacks.push(() => {
-        const imports = [];
+        const imports = customImports;
         if(addImportCallbacks.hasOwnProperty(uuid)) {
             const referencedObjects = allKnownReferenceableObjects.filter(p => addImportCallbacks[uuid].includes(p.obj));
             console.log()
@@ -133,6 +152,8 @@ for(const key in rootCategory) {
     })
 }
 writeCallbacks.forEach(c => c());
+
+console.log("Hello, World!")
 
 console.log("Writing Global.d.ts file")
 // const modelImportStatements = modelReferences.map((m) => `import type { Exposed${m.name}Object } from "./models/${m.name}.d.ts";`).join('\n');
@@ -150,6 +171,8 @@ export declare interface ExposedModel<T> {
     update(selector: T): { set: (values: T) => Promise<void> };
     findOne(selector: T): Promise<T>;
     find(selector: T): Promise<T[]>;
+    count(selector: T): Promise<number>;
+    create(selector: T): Promise<T>;
 }
 
 declare interface HelpersObject {

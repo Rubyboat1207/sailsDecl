@@ -39,7 +39,7 @@ const createIndividualHelper = (name, inputType, outputType) => {
 }
 
 const createHelpersObject = (topLevelCategories) => {
-    return topLevelCategories.map(c => `${c.substring(0, c.length - 6)}: ${utils.uppercaseFirstLetter(c)}`).join(';\n    ')
+    return topLevelCategories.map(c => `${c.substring(0, c.length - 6).toLowerCase()}: ${utils.uppercaseFirstLetter(c)}`).join(';\n    ')
 }
 
 
