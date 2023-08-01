@@ -1,21 +1,21 @@
-var fs = require("fs");
+var fs = require('fs');
 
 const isASailsProject = () => {
-  return fs.existsSync("./.sailsrc");
+  return fs.existsSync('./.sailsrc');
 };
 
-const getAllModels = (rootDir = "") => {
-  const dircont = fs.readdirSync("./api/models/" + rootDir);
+const getAllModels = (rootDir = '') => {
+  const dircont = fs.readdirSync('./api/models/' + rootDir);
 
   const models = [];
 
   for (const item of dircont) {
-    if (!item.includes(".")) {
+    if (!item.includes('.')) {
       console.log(`checking subdirectory: ${item}`);
-      models.push(...getAllModels(rootDir + item + "/"));
+      models.push(...getAllModels(rootDir + item + '/'));
       continue;
     }
-    if (!item.endsWith(".js")) {
+    if (!item.endsWith('.js')) {
       continue;
     }
     console.log(`Found Model: ${item}`);
@@ -33,18 +33,18 @@ const getAllModels = (rootDir = "") => {
   return models;
 };
 
-const getAllHelpers = (rootDir = "") => {
-  const dircont = fs.readdirSync("./api/helpers/" + rootDir);
+const getAllHelpers = (rootDir = '') => {
+  const dircont = fs.readdirSync('./api/helpers/' + rootDir);
 
   const helpers = [];
 
   for (const item of dircont) {
-    if (!item.includes(".")) {
+    if (!item.includes('.')) {
       console.log(`found subdirectory: ${item}`);
-      helpers.push(...getAllHelpers(rootDir + item + "/"));
+      helpers.push(...getAllHelpers(rootDir + item + '/'));
       continue;
     }
-    if (!item.endsWith(".js")) {
+    if (!item.endsWith('.js')) {
       continue;
     }
     console.log(`Found Helper: ${item}`);
@@ -60,44 +60,48 @@ const getAllHelpers = (rootDir = "") => {
   return helpers;
 };
 
-const uppercaseFirstLetter = (str) => {
+const uppercaseFirstLetter = str => {
   return str[0].toUpperCase() + str.substring(1);
 };
 
 const getTSTypeFromSailsType = (sailsType, columnType) => {
-  if (["string", "number", "boolean"].includes(sailsType)) {
-    if (columnType === "datetime") {
-      return "Date";
+  if (['string', 'number', 'boolean'].includes(sailsType)) {
+    if (columnType === 'datetime') {
+      return 'Date';
     } else {
       return sailsType;
     }
   } else {
-    return "any";
+    return 'any';
   }
 };
 
 const appendNullableIfApplicable = (string, nullable, required) => {
   if (nullable === false || required === true) {
-    return string + " | null";
+    return string + ' | null';
   }
   return string;
 };
 
-const getFullTsTypeDeclFromSailsObject = (sailsAttributeObject, callbackList, uuid) => {
-  if (sailsAttributeObject.hasOwnProperty("$SD")) {
-    if(!callbackList.hasOwnProperty(uuid)) {
-        callbackList[uuid] = []
+const getFullTsTypeDeclFromSailsObject = (
+  sailsAttributeObject,
+  callbackList,
+  uuid,
+) => {
+  if (sailsAttributeObject.hasOwnProperty('$SD')) {
+    if (!callbackList.hasOwnProperty(uuid)) {
+      callbackList[uuid] = [];
     }
-    callbackList[uuid].push(sailsAttributeObject["$SD"])
-    return sailsAttributeObject["$SD"];
+    callbackList[uuid].push(sailsAttributeObject['$SD']);
+    return sailsAttributeObject['$SD'];
   }
   return appendNullableIfApplicable(
     getTSTypeFromSailsType(
       sailsAttributeObject.type,
-      sailsAttributeObject.columnType
+      sailsAttributeObject.columnType,
     ),
     sailsAttributeObject.allowNull,
-    sailsAttributeObject.required
+    sailsAttributeObject.required,
   );
 };
 
@@ -108,5 +112,5 @@ module.exports = {
   getTSTypeFromSailsType,
   uppercaseFirstLetter,
   appendNullableIfApplicable,
-  getFullTsTypeDeclFromSailsObject
+  getFullTsTypeDeclFromSailsObject,
 };
